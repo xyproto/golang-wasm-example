@@ -1,8 +1,10 @@
-# golang-wasm-example
+# Disco Gopher
 
-![wasm](https://raw.githubusercontent.com/mattn/golang-wasm-example/master/screenshot.gif)
+This is a fork of [golang-wasm-example](https://github.com/mattn/golang-wasm-example), with these added features:
 
-Example app using Go's wasm support.
+* The gopher has a mustache.
+* The gopher is moving randomly left and right.
+* The background is blinking.
 
 ## Build
 
@@ -13,14 +15,7 @@ GOOS=js GOARCH=wasm go build -o main.wasm main.go
 ```
 
 
-## Run
-
-```sh
-go get github.com/mattn/serve
-serve
-```
-
-## Build and run
+## Build, run, serve and open in a browser
 
 ```sh
 make
@@ -30,6 +25,6 @@ make
 
 MIT
 
-## Author
+## Original Author
 
 Yasuhrio Matsumoto (a.k.a. mattn)
