@@ -81,7 +81,7 @@ func main() {
 
 		style := canvas.Get("style")
 		left := style.Get("left")
-		if left.Equal(js.Undefined()) {
+		if left == js.Undefined() {
 			left = js.ValueOf("320px")
 		} else {
 			//n, _ := strconv.Atoi(strings.TrimRight(left.String(), "px"))
