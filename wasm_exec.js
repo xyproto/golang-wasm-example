@@ -113,19 +113,24 @@
 			this._scheduledTimeouts = new Map();
 			this._nextCallbackTimeoutID = 1;
 
+			const mem = () => {
+				// The buffer may change when requesting more memory.
+				return new DataView(this._inst.exports.mem.buffer);
+			}
+
 			const setInt64 = (addr, v) => {
-				this.mem.setUint32(addr + 0, v, true);
-				this.mem.setUint32(addr + 4, Math.floor(v / 4294967296), true);
+				mem().setUint32(addr + 0, v, true);
+				mem().setUint32(addr + 4, Math.floor(v / 4294967296), true);
 			}
 
 			const getInt64 = (addr) => {
-				const low = this.mem.getUint32(addr + 0, true);
-				const high = this.mem.getInt32(addr + 4, true);
+				const low = mem().getUint32(addr + 0, true);
+				const high = mem().getInt32(addr + 4, true);
 				return low + high * 4294967296;
 			}
 
 			const loadValue = (addr) => {
-				const f = this.mem.getFloat64(addr, true);
+				const f = mem().getFloat64(addr, true);
 				if (f === 0) {
 					return undefined;
 				}
@@ -133,7 +138,7 @@
 					return f;
 				}
 
-				const id = this.mem.getUint32(addr, true);
+				const id = mem().getUint32(addr, true);
 				return this._values[id];
 			}
 
@@ -142,34 +147,34 @@
 
 				if (typeof v === "number") {
 					if (isNaN(v)) {
-						this.mem.setUint32(addr + 4, nanHead, true);
-						this.mem.setUint32(addr, 0, true);
+						mem().setUint32(addr + 4, nanHead, true);
+						mem().setUint32(addr, 0, true);
 						return;
 					}
 					if (v === 0) {
-						this.mem.setUint32(addr + 4, nanHead, true);
-						this.mem.setUint32(addr, 1, true);
+						mem().setUint32(addr + 4, nanHead, true);
+						mem().setUint32(addr, 1, true);
 						return;
 					}
-					this.mem.setFloat64(addr, v, true);
+					mem().setFloat64(addr, v, true);
 					return;
 				}
 
 				switch (v) {
 					case undefined:
-						this.mem.setFloat64(addr, 0, true);
+						mem().setFloat64(addr, 0, true);
 						return;
 					case null:
-						this.mem.setUint32(addr + 4, nanHead, true);
-						this.mem.setUint32(addr, 2, true);
+						mem().setUint32(addr + 4, nanHead, true);
+						mem().setUint32(addr, 2, true);
 						return;
 					case true:
-						this.mem.setUint32(addr + 4, nanHead, true);
-						this.mem.setUint32(addr, 3, true);
+						mem().setUint32(addr + 4, nanHead, true);
+						mem().setUint32(addr, 3, true);
 						return;
 					case false:
-						this.mem.setUint32(addr + 4, nanHead, true);
-						this.mem.setUint32(addr, 4, true);
+						mem().setUint32(addr + 4, nanHead, true);
+						mem().setUint32(addr, 4, true);
 						return;
 				}
 
@@ -191,8 +196,8 @@
 						typeFlag = 3;
 						break;
 				}
-				this.mem.setUint32(addr + 4, nanHead | typeFlag, true);
-				this.mem.setUint32(addr, ref, true);
+				mem().setUint32(addr + 4, nanHead | typeFlag, true);
+				mem().setUint32(addr, ref, true);
 			}
 
 			const loadSlice = (addr) => {
@@ -227,7 +232,7 @@
 
 					// func wasmExit(code int32)
 					"runtime.wasmExit": (sp) => {
-						const code = this.mem.getInt32(sp + 8, true);
+						const code = mem().getInt32(sp + 8, true);
 						this.exited = true;
 						delete this._inst;
 						delete this._values;
@@ -239,25 +244,20 @@
 					"runtime.wasmWrite": (sp) => {
 						const fd = getInt64(sp + 8);
 						const p = getInt64(sp + 16);
-						const n = this.mem.getInt32(sp + 24, true);
+						const n = mem().getInt32(sp + 24, true);
 						fs.writeSync(fd, new Uint8Array(this._inst.exports.mem.buffer, p, n));
 					},
 
-					// func resetMemoryDataView()
-					"runtime.resetMemoryDataView": (sp) => {
-						this.mem = new DataView(this._inst.exports.mem.buffer);
-					},
-
-					// func nanotime1() int64
-					"runtime.nanotime1": (sp) => {
+					// func nanotime() int64
+					"runtime.nanotime": (sp) => {
 						setInt64(sp + 8, (timeOrigin + performance.now()) * 1000000);
 					},
 
-					// func walltime1() (sec int64, nsec int32)
-					"runtime.walltime1": (sp) => {
+					// func walltime() (sec int64, nsec int32)
+					"runtime.walltime": (sp) => {
 						const msec = (new Date).getTime();
 						setInt64(sp + 8, msec / 1000);
-						this.mem.setInt32(sp + 16, (msec % 1000) * 1000000, true);
+						mem().setInt32(sp + 16, (msec % 1000) * 1000000, true);
 					},
 
 					// func scheduleTimeoutEvent(delay int64) int32
@@ -276,12 +276,12 @@
 							},
 							getInt64(sp + 8) + 1, // setTimeout has been seen to fire up to 1 millisecond early
 						));
-						this.mem.setInt32(sp + 16, id, true);
+						mem().setInt32(sp + 16, id, true);
 					},
 
 					// func clearTimeoutEvent(id int32)
 					"runtime.clearTimeoutEvent": (sp) => {
-						const id = this.mem.getInt32(sp + 8, true);
+						const id = mem().getInt32(sp + 8, true);
 						clearTimeout(this._scheduledTimeouts.get(id));
 						this._scheduledTimeouts.delete(id);
 					},
@@ -308,11 +308,6 @@
 						Reflect.set(loadValue(sp + 8), loadString(sp + 16), loadValue(sp + 32));
 					},
 
-					// func valueDelete(v ref, p string)
-					"syscall/js.valueDelete": (sp) => {
-						Reflect.deleteProperty(loadValue(sp + 8), loadString(sp + 16));
-					},
-
 					// func valueIndex(v ref, i int) ref
 					"syscall/js.valueIndex": (sp) => {
 						storeValue(sp + 24, Reflect.get(loadValue(sp + 8), getInt64(sp + 16)));
@@ -332,10 +327,10 @@
 							const result = Reflect.apply(m, v, args);
 							sp = this._inst.exports.getsp(); // see comment above
 							storeValue(sp + 56, result);
-							this.mem.setUint8(sp + 64, 1);
+							mem().setUint8(sp + 64, 1);
 						} catch (err) {
 							storeValue(sp + 56, err);
-							this.mem.setUint8(sp + 64, 0);
+							mem().setUint8(sp + 64, 0);
 						}
 					},
 
@@ -347,10 +342,10 @@
 							const result = Reflect.apply(v, undefined, args);
 							sp = this._inst.exports.getsp(); // see comment above
 							storeValue(sp + 40, result);
-							this.mem.setUint8(sp + 48, 1);
+							mem().setUint8(sp + 48, 1);
 						} catch (err) {
 							storeValue(sp + 40, err);
-							this.mem.setUint8(sp + 48, 0);
+							mem().setUint8(sp + 48, 0);
 						}
 					},
 
@@ -362,10 +357,10 @@
 							const result = Reflect.construct(v, args);
 							sp = this._inst.exports.getsp(); // see comment above
 							storeValue(sp + 40, result);
-							this.mem.setUint8(sp + 48, 1);
+							mem().setUint8(sp + 48, 1);
 						} catch (err) {
 							storeValue(sp + 40, err);
-							this.mem.setUint8(sp + 48, 0);
+							mem().setUint8(sp + 48, 0);
 						}
 					},
 
@@ -389,7 +384,7 @@
 
 					// func valueInstanceOf(v ref, t ref) bool
 					"syscall/js.valueInstanceOf": (sp) => {
-						this.mem.setUint8(sp + 24, loadValue(sp + 8) instanceof loadValue(sp + 16));
+						mem().setUint8(sp + 24, loadValue(sp + 8) instanceof loadValue(sp + 16));
 					},
 
 					// func copyBytesToGo(dst []byte, src ref) (int, bool)
@@ -397,13 +392,13 @@
 						const dst = loadSlice(sp + 8);
 						const src = loadValue(sp + 32);
 						if (!(src instanceof Uint8Array)) {
-							this.mem.setUint8(sp + 48, 0);
+							mem().setUint8(sp + 48, 0);
 							return;
 						}
 						const toCopy = src.subarray(0, dst.length);
 						dst.set(toCopy);
 						setInt64(sp + 40, toCopy.length);
-						this.mem.setUint8(sp + 48, 1);
+						mem().setUint8(sp + 48, 1);
 					},
 
 					// func copyBytesToJS(dst ref, src []byte) (int, bool)
@@ -411,13 +406,13 @@
 						const dst = loadValue(sp + 8);
 						const src = loadSlice(sp + 16);
 						if (!(dst instanceof Uint8Array)) {
-							this.mem.setUint8(sp + 48, 0);
+							mem().setUint8(sp + 48, 0);
 							return;
 						}
 						const toCopy = src.subarray(0, dst.length);
 						dst.set(toCopy);
 						setInt64(sp + 40, toCopy.length);
-						this.mem.setUint8(sp + 48, 1);
+						mem().setUint8(sp + 48, 1);
 					},
 
 					"debug": (value) => {
@@ -429,7 +424,6 @@
 
 		async run(instance) {
 			this._inst = instance;
-			this.mem = new DataView(this._inst.exports.mem.buffer);
 			this._values = [ // TODO: garbage collection
 				NaN,
 				0,
@@ -442,13 +436,15 @@
 			this._refs = new Map();
 			this.exited = false;
 
+			const mem = new DataView(this._inst.exports.mem.buffer)
+
 			// Pass command line arguments and environment variables to WebAssembly by writing them to the linear memory.
 			let offset = 4096;
 
 			const strPtr = (str) => {
 				const ptr = offset;
 				const bytes = encoder.encode(str + "\0");
-				new Uint8Array(this.mem.buffer, offset, bytes.length).set(bytes);
+				new Uint8Array(mem.buffer, offset, bytes.length).set(bytes);
 				offset += bytes.length;
 				if (offset % 8 !== 0) {
 					offset += 8 - (offset % 8);
@@ -462,18 +458,17 @@
 			this.argv.forEach((arg) => {
 				argvPtrs.push(strPtr(arg));
 			});
-			argvPtrs.push(0);
 
 			const keys = Object.keys(this.env).sort();
+			argvPtrs.push(keys.length);
 			keys.forEach((key) => {
 				argvPtrs.push(strPtr(`${key}=${this.env[key]}`));
 			});
-			argvPtrs.push(0);
 
 			const argv = offset;
 			argvPtrs.forEach((ptr) => {
-				this.mem.setUint32(offset, ptr, true);
-				this.mem.setUint32(offset + 4, 0, true);
+				mem.setUint32(offset, ptr, true);
+				mem.setUint32(offset + 4, 0, true);
 				offset += 8;
 			});
 

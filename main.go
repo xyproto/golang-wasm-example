@@ -9,13 +9,20 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
 	"syscall/js"
 	"time"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+func minus256toplus256() int {
+	return rand.Intn(512) - 256
+}
 
 func loadImage(path string) string {
 	href := js.Global().Get("location").Get("href")
@@ -58,10 +65,13 @@ func main() {
 		images[i].Set("src", "data:image/png;base64,"+loadImage(file))
 	}
 
-	canvas.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		js.Global().Get("window").Call("alert", "Don't click me!")
-		return nil
-	}))
+	//canvas.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	//	js.Global().Get("window").Call("alert", "Don't click me!")
+	//	return nil
+	//}))
+
+	bgColors := []string{"red", "yellow", "blue", "green", "white"}
+	bgColorIndex := 0
 
 	n := 0
 	js.Global().Call("setInterval", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
@@ -72,12 +82,21 @@ func main() {
 		style := canvas.Get("style")
 		left := style.Get("left")
 		if left == js.Undefined() {
-			left = js.ValueOf("0px")
+			left = js.ValueOf("320px")
 		} else {
-			n, _ := strconv.Atoi(strings.TrimRight(left.String(), "px"))
-			left = js.ValueOf(fmt.Sprintf("%dpx", n+10))
+			//n, _ := strconv.Atoi(strings.TrimRight(left.String(), "px"))
+			left = js.ValueOf(fmt.Sprintf("%dpx", 320+minus256toplus256()))
 		}
 		style.Set("left", left)
+
+		bgColor := bgColors[bgColorIndex]
+		bgColorIndex++
+		if bgColorIndex >= len(bgColors) {
+			bgColorIndex = 0
+		}
+		style.Set("background-color", bgColor)
+		body := document.Get("documentElement")
+		body.Call("setAttribute", "style", "background-color: " + bgColor)
 
 		return nil
 	}), js.ValueOf(50))
